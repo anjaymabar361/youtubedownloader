@@ -229,6 +229,26 @@ def server_error(error):
     """Handle 500 errors"""
     return jsonify({'error': 'Internal server error'}), 500
 
+@app.route('/api/debug-test', methods=['GET'])
+def debug_test():
+    """Test yt-dlp connectivity"""
+    import subprocess
+    test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    
+    try:
+        # Simple test command
+        cmd = ['yt-dlp', '--version']
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        return jsonify({
+            'yt_dlp_version': result.stdout.strip() if result.returncode == 0 else 'Not found',
+            'error': result.stderr[:200] if result.returncode != 0 else None,
+            'test_url': test_url,
+            'time': time.time()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # Ensure directories exist
     ensure_directories()
