@@ -32,7 +32,6 @@ class YouTubeDownloader:
         self.current_url = None
         self.output_path = None
 
-        # Dalam class YouTubeDownloader, tambah fungsi reset_status:
     def reset_status(self):
         """Reset download status to idle"""
         with self.download_lock:
@@ -52,24 +51,157 @@ class YouTubeDownloader:
             self.current_url = None
             self.output_path = None
             self.current_process = None
-        
+    
     def get_browser_cookies(self):
-        """Check for browser cookies"""
-        browsers = ['chrome', 'firefox', 'brave', 'edge', 'chromium']
+        """Get cookies from browser - UPDATED FOR RAILWAY"""
+        browsers = ['chrome', 'firefox', 'brave', 'edge', 'chromium', 'opera', 'vivaldi']
+        
         for browser in browsers:
             try:
-                cmd = ['yt-dlp', '--cookies-from-browser', browser, '--dump-json', '--no-warnings', '--simulate']
-                test_url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                result = subprocess.run(cmd + [test_url], capture_output=True, text=True, timeout=10)
+                # Coba dengan berbagai browser
+                cmd = [
+                    'yt-dlp', 
+                    '--cookies-from-browser', browser,
+                    '--dump-json',
+                    '--no-warnings',
+                    '--simulate',
+                    '--geo-bypass',
+                    'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                ]
+                
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=15,
+                    env={**os.environ, 'DISPLAY': ':0', 'DBUS_SESSION_BUS_ADDRESS': ''}
+                )
+                
                 if result.returncode == 0:
+                    print(f"✅ Found cookies from: {browser}")
                     return browser
             except Exception as e:
+                print(f"❌ Browser {browser}: {str(e)[:50]}")
                 continue
+        
+        print("⚠️ No browser cookies found, using fallback method")
         return None
+    
+    def _extract_video_id(self, url):
+        """Extract video ID dari URL"""
+        patterns = [
+            r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
+            r'(?:embed\/)([0-9A-Za-z_-]{11})',
+            r'(?:shorts\/)([0-9A-Za-z_-]{11})'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return None
+    
+    def _download_with_ytdlp_aggressive(self, url, quality, format_type, concurrent_fragments):
+        """AGGRESSIVE METHOD untuk bypass YouTube blocking"""
+        try:
+            # Setup save path
+            home = os.path.expanduser("~")
+            save_path = os.path.join(home, "Downloads", "YouTube_Downloads")
+            os.makedirs(save_path, exist_ok=True)
+            output_template = f'{save_path}/%(title)s.%(ext)s'
+            
+            # AGGRESSIVE BYPASS OPTIONS
+            cmd = [
+                'yt-dlp',
+                '--no-warnings',
+                '--newline',
+                '--progress',
+                # BYPASS OPTIONS MAXIMAL
+                '--geo-bypass',
+                '--geo-bypass-country', 'US',
+                '--force-ipv4',
+                '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                '--referer', 'https://www.youtube.com/',
+                '--sleep-interval', '3',
+                '--max-sleep-interval', '8',
+                '--retries', '15',
+                '--fragment-retries', '15',
+                '--skip-unavailable-fragments',
+                '--concurrent-fragments', str(concurrent_fragments),
+                '--throttled-rate', '100K',
+                # Extractors khusus
+                '--extractor-args', 'youtube:player_client=android,ios,web',
+                '--youtube-include-dash-manifest',
+                '--youtube-include-hls-manifest',
+                '--compat-options', 'no-youtube-unavailable-video',
+                '--no-check-certificate',
+                '-o', output_template
+            ]
+            
+            # Format selection dengan FALLBACK
+            if format_type == 'video':
+                if quality == 'best':
+                    cmd.extend(['-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/bestvideo[height<=720]+bestaudio/best[height<=720]/best'])
+                elif quality == '720p':
+                    cmd.extend(['-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]/bestvideo[height<=480]+bestaudio'])
+                elif quality == '480p':
+                    cmd.extend(['-f', 'bestvideo[height<=480]+bestaudio/best[height<=480]/bestvideo[height<=360]+bestaudio'])
+                elif quality == '360p':
+                    cmd.extend(['-f', 'bestvideo[height<=360]+bestaudio/best[height<=360]/worstvideo+worstaudio'])
+                cmd.extend(['--merge-output-format', 'mp4'])
+            elif format_type == 'audio':
+                cmd.extend(['-f', 'bestaudio[acodec=mp4a]/bestaudio/bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '320K'])
+            
+            cmd.append(url)
+            
+            print(f"🚀 AGGRESSIVE METHOD: {' '.join(cmd[:10])}...")
+            
+            # Run process
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1,
+                encoding='utf-8',
+                errors='replace'
+            )
+            
+            # Monitor progress
+            for line in iter(process.stdout.readline, ''):
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Check for cancel
+                with self.download_lock:
+                    if self.download_status['status'] == 'cancelled':
+                        process.terminate()
+                        break
+                
+                # Parse progress
+                self._parse_line(line)
+                print(f"📊 {line}")
+            
+            # Wait for completion
+            return_code = process.wait()
+            
+            if return_code == 0:
+                print("✅ Download successful with aggressive method")
+                return True
+            else:
+                print(f"❌ Aggressive method failed with code: {return_code}")
+                return False
+                
+        except Exception as e:
+            print(f"💥 Aggressive method error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     def download_video(self, url, quality='best', format_type='video', 
                       custom_path=None, max_speed=None, concurrent_fragments=5):
-        """Download YouTube video with optimizations"""
+        """Download YouTube video dengan multiple fallback methods"""
         
         # Reset status
         with self.download_lock:
@@ -89,162 +221,26 @@ class YouTubeDownloader:
             }
             self.last_update_time = time.time()
         
-        try:
-            # Setup save path - FIXED: Use custom path if provided
-            if custom_path and os.path.exists(os.path.dirname(custom_path)):
-                # If custom_path is a file path, use its directory
-                if os.path.isdir(custom_path):
-                    save_path = custom_path
-                else:
-                    save_path = os.path.dirname(custom_path)
+        print(f"🎯 Starting download with AGGRESSIVE method for: {url}")
+        
+        # Langsung pakai AGGRESSIVE method (skip method biasa)
+        success = self._download_with_ytdlp_aggressive(url, quality, format_type, concurrent_fragments)
+        
+        with self.download_lock:
+            if success:
+                self.download_status['status'] = 'completed'
+                self.download_status['progress'] = 100
+                self.download_status['message'] = 'Download completed successfully!'
+                self.last_update_time = time.time()
+                print("🎉 FINAL: Download completed!")
+                return True
             else:
-                # Default download directory
-                home = os.path.expanduser("~")
-                save_path = os.path.join(home, "Downloads", "YouTube_Downloads")
-            
-            os.makedirs(save_path, exist_ok=True)
-            self.output_path = save_path
-            
-            # Get cookies
-            browser = self.get_browser_cookies()
-            print(f"📊 Using browser cookies from: {browser}")
-            
-            # Output template - FIXED: More organized naming
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_template = f'{save_path}/%(title)s_{timestamp}.%(ext)s'
-            
-            # Build command
-            cmd = [
-            'yt-dlp',
-            '--no-warnings',
-            '--newline',
-            '--progress',
-            '--retries', '10',
-            '--fragment-retries', '10',
-            '--concurrent-fragments', str(concurrent_fragments),
-            '--throttled-rate', '100K',
-            '--socket-timeout', '30',
-            '--source-address', '0.0.0.0',
-            # OPTIONS BYPASS PENTING:
-            '--geo-bypass',
-            '--geo-bypass-country', 'US',
-            '--force-ipv4',
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            '--referer', 'https://www.youtube.com/',
-            '--xattr-set-filesize',
-            '--limit-rate', '2M',  # Batasi kecepatan agar tidak terdeteksi
-            '--sleep-interval', '2',
-            '--max-sleep-interval', '5',
-            '-o', output_template
-            ]
-            
-            # Add cookies if available
-            if browser:
-                cmd.extend(['--cookies-from-browser', browser])
-            
-            # Add speed limit if specified
-            if max_speed and str(max_speed).strip() and max_speed != '0':
-                cmd.extend(['--limit-rate', str(max_speed)])
-                print(f"⚡ Speed limit set to: {max_speed}")
-            
-            # Add format-specific options
-            # Add format-specific options
-            if format_type == 'video':
-                if quality == 'best':
-                    cmd.extend(['-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best'])
-                elif quality == '720p':
-                    cmd.extend(['-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]'])
-                elif quality == '480p':
-                    cmd.extend(['-f', 'bestvideo[height<=480]+bestaudio/best[height<=480]'])
-                elif quality == '360p':
-                    cmd.extend(['-f', 'bestvideo[height<=360]+bestaudio/best[height<=360]'])
-                cmd.extend(['--merge-output-format', 'mp4'])
-            elif format_type == 'audio':
-                # GUNAKAN FORMAT YANG LEBIH KOMPATIBEL
-                cmd.extend(['-f', 'bestaudio[acodec=mp4a]/bestaudio', '-x', '--audio-format', 'mp3', '--audio-quality', '320K'])
-                        
-            # Add URL
-            cmd.append(url)
-            
-            with self.download_lock:
-                self.download_status['status'] = 'downloading'
-                self.download_status['message'] = f'Starting download with {concurrent_fragments} connections...'
-                self.last_update_time = time.time()
-            
-            print(f"🚀 Starting download for: {url}")
-            
-            # Start process
-            self.current_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1,
-                encoding='utf-8',
-                errors='replace'
-            )
-            
-            # Monitor progress
-            for line in iter(self.current_process.stdout.readline, ''):
-                line = line.strip()
-                if not line:
-                    continue
-                
-                # Check for cancel
-                with self.download_lock:
-                    if self.download_status['status'] == 'cancelled':
-                        self.current_process.terminate()
-                        break
-                
-                # Parse progress
-                self._parse_line(line)
-                print(f"📊 {line}")
-            
-            # Wait for completion
-            return_code = self.current_process.wait()
-            
-            with self.download_lock:
-                if self.download_status['status'] == 'cancelled':
-                    self.current_process = None
-                    return False
-                elif return_code == 0:
-                    self.download_status['status'] = 'completed'
-                    self.download_status['progress'] = 100
-                    self.download_status['message'] = 'Download completed successfully!'
-                    self.download_status['speed'] = '0 KB/s'
-                    self.download_status['eta'] = '--:--'
-                    self.last_update_time = time.time()
-                    self.current_process = None
-                    
-                    # Update filename with full path
-                    if self.download_status['filename'] and self.output_path:
-                        full_path = os.path.join(self.output_path, self.download_status['filename'])
-                        self.download_status['filepath'] = full_path
-                    
-                    print("✅ Download completed successfully!")
-                    return True
-                else:
-                    self.download_status['status'] = 'error'
-                    self.download_status['message'] = f'Download failed with code {return_code}'
-                    self.download_status['error'] = True
-                    self.download_status['error_message'] = f'Exit code: {return_code}'
-                    self.last_update_time = time.time()
-                    self.current_process = None
-                    print(f"❌ Download failed with return code: {return_code}")
-                    return False
-                    
-        except Exception as e:
-            print(f"❌ Download error: {e}")
-            import traceback
-            traceback.print_exc()
-            with self.download_lock:
                 self.download_status['status'] = 'error'
-                self.download_status['message'] = f'Error: {str(e)[:100]}'
                 self.download_status['error'] = True
-                self.download_status['error_message'] = str(e)
+                self.download_status['error_message'] = 'Failed after aggressive retries'
                 self.last_update_time = time.time()
-                self.current_process = None
-            return False
+                print("💥 FINAL: All methods failed")
+                return False
     
     def _parse_line(self, line):
         """Parse yt-dlp output line for progress info"""
@@ -256,6 +252,7 @@ class YouTubeDownloader:
                     percent = float(match.group(1))
                     with self.download_lock:
                         self.download_status['progress'] = percent
+                        self.download_status['message'] = f'Downloading: {percent:.1f}%'
             
             # Parse speed
             if 'at' in line and ('MiB/s' in line or 'KiB/s' in line or 'B/s' in line):
@@ -277,15 +274,18 @@ class YouTubeDownloader:
                         self.download_status['eta'] = '--:--'
             
             # Parse filename
-            if 'Destination:' in line:
-                filename = line.split('Destination:', 1)[1].strip()
+            if 'Destination:' in line or '[Merger]' in line:
+                if 'Destination:' in line:
+                    filename = line.split('Destination:', 1)[1].strip()
+                else:
+                    filename = line.split('[Merger]', 1)[1].strip()
+                
                 with self.download_lock:
                     self.download_status['filename'] = os.path.basename(filename)
                     self.download_status['filepath'] = filename
             
             # Parse file size and downloaded
-            if 'of' in line and 'in' in line and 'ETA' in line:
-                # Example: [download]  12.5% of   85.23MiB at    5.12MiB/s ETA 00:15
+            if 'of' in line and 'in' in line:
                 match = re.search(r'of\s+([\d\.]+\s*[KMG]?i?B)', line)
                 if match:
                     with self.download_lock:
@@ -298,17 +298,14 @@ class YouTubeDownloader:
                         self.download_status['downloaded'] = downloaded
             
             # Parse when download complete
-            if 'has already been downloaded' in line:
+            if 'has already been downloaded' in line or '100%' in line:
                 with self.download_lock:
-                    self.download_status['status'] = 'completed'
-                    self.download_status['progress'] = 100
-                    self.download_status['message'] = 'Already downloaded'
+                    if self.download_status['progress'] < 100:
+                        self.download_status['progress'] = 100
             
-            # Update message
+            # Update last update time
             with self.download_lock:
-                if self.download_status['progress'] > 0 and self.download_status['status'] == 'downloading':
-                    self.download_status['message'] = f'Downloading: {self.download_status["progress"]:.1f}%'
-                    self.last_update_time = time.time()
+                self.last_update_time = time.time()
                     
         except Exception as e:
             print(f"⚠️ Parse error: {e}")
@@ -327,21 +324,7 @@ class YouTubeDownloader:
             if self.download_status['status'] in ['completed', 'error', 'cancelled']:
                 elapsed = time.time() - self.last_update_time
                 if elapsed > 30:
-                    self.download_status = {
-                        'status': 'idle',
-                        'progress': 0,
-                        'message': 'Ready to download',
-                        'filename': '',
-                        'filepath': '',
-                        'error': False,
-                        'error_message': '',
-                        'speed': '0 KB/s',
-                        'eta': '--:--',
-                        'filesize': '0 MB',
-                        'downloaded': '0 MB'
-                    }
-                    self.current_url = None
-                    self.output_path = None
+                    self.reset_status()
             
             return self.download_status.copy()
     
