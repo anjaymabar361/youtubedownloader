@@ -115,16 +115,27 @@ class YouTubeDownloader:
             
             # Build command
             cmd = [
-                'yt-dlp',
-                '--no-warnings',
-                '--newline',
-                '--progress',
-                '--retries', '10',
-                '--fragment-retries', '10',
-                '--concurrent-fragments', str(concurrent_fragments),
-                '--buffer-size', '16K',
-                '--http-chunk-size', '5M',
-                '-o', output_template
+            'yt-dlp',
+            '--no-warnings',
+            '--newline',
+            '--progress',
+            '--retries', '10',
+            '--fragment-retries', '10',
+            '--concurrent-fragments', str(concurrent_fragments),
+            '--throttled-rate', '100K',
+            '--socket-timeout', '30',
+            '--source-address', '0.0.0.0',
+            # OPTIONS BYPASS PENTING:
+            '--geo-bypass',
+            '--geo-bypass-country', 'US',
+            '--force-ipv4',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '--referer', 'https://www.youtube.com/',
+            '--xattr-set-filesize',
+            '--limit-rate', '2M',  # Batasi kecepatan agar tidak terdeteksi
+            '--sleep-interval', '2',
+            '--max-sleep-interval', '5',
+            '-o', output_template
             ]
             
             # Add cookies if available
@@ -137,9 +148,10 @@ class YouTubeDownloader:
                 print(f"⚡ Speed limit set to: {max_speed}")
             
             # Add format-specific options
+            # Add format-specific options
             if format_type == 'video':
                 if quality == 'best':
-                    cmd.extend(['-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]'])
+                    cmd.extend(['-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best'])
                 elif quality == '720p':
                     cmd.extend(['-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]'])
                 elif quality == '480p':
@@ -148,8 +160,9 @@ class YouTubeDownloader:
                     cmd.extend(['-f', 'bestvideo[height<=360]+bestaudio/best[height<=360]'])
                 cmd.extend(['--merge-output-format', 'mp4'])
             elif format_type == 'audio':
-                cmd.extend(['-f', 'bestaudio', '-x', '--audio-format', 'mp3', '--audio-quality', '0'])
-            
+                # GUNAKAN FORMAT YANG LEBIH KOMPATIBEL
+                cmd.extend(['-f', 'bestaudio[acodec=mp4a]/bestaudio', '-x', '--audio-format', 'mp3', '--audio-quality', '320K'])
+                        
             # Add URL
             cmd.append(url)
             
