@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo-container">
+                <i class="fab fa-youtube logo-icon"></i>
+                <h1>YouTube Downloader <span class="pro-badge">Pro</span></h1>
+            </div>
+            <p class="subtitle">Download video & audio YouTube dengan cepat dan mudah</p>
+        </header>
+
+        <main class="main-content">
+            <div class="card main-card">
+                <!-- URL Input -->
+                <div class="form-group">
+                    <label for="urlInput"><i class="fas fa-link"></i> URL YouTube</label>
+                    <div class="input-with-icon">
+                        <i class="fas fa-link input-icon"></i>
+                        <input type="text" id="urlInput" placeholder="https://youtube.com/watch?v=..." autocomplete="off">
+                        <button class="icon-btn paste-btn" id="pasteBtn" title="Tempel dari clipboard">
+                            <i class="fas fa-paste"></i>
+                            <span class="tooltip">Tempel</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Format & Quality -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="formatSelect"><i class="fas fa-film"></i> Format</label>
+                        <div class="select-wrapper">
+                            <select id="formatSelect">
+                                <option value="video">Video (MP4)</option>
+                                <option value="audio">Audio (MP3)</option>
+                            </select>
+                            <i class="fas fa-chevron-down select-arrow"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="qualitySelect"><i class="fas fa-hd"></i> Kualitas</label>
+                        <div class="select-wrapper">
+                            <select id="qualitySelect">
+                                <option value="best">Terbaik</option>
+                                <option value="720p">HD 720p</option>
+                                <option value="480p">SD 480p</option>
+                                <option value="360p">360p</option>
+                            </select>
+                            <i class="fas fa-chevron-down select-arrow"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Download Button -->
+                <div class="action-buttons">
+                    <button id="downloadBtn" class="btn-primary">
+                        <i class="fas fa-download"></i> 
+                        <span class="btn-text">Download Sekarang</span>
+                    </button>
+                    <button id="cancelBtn" class="btn-secondary" disabled>
+                        <i class="fas fa-stop"></i>
+                        <span class="btn-text">Batalkan</span>
+                    </button>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress-container" id="progressContainer" style="display: none;">
+                    <div class="progress-header">
+                        <span class="progress-title">Proses Download</span>
+                        <span id="progressText" class="progress-percentage">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                        <div class="progress-indicator"></div>
+                    </div>
+                    <div class="progress-info">
+                        <span id="progressMessage" class="progress-message">Mempersiapkan...</span>
+                        <span id="speedText" class="progress-speed">Kecepatan: 0 KB/s</span>
+                    </div>
+                </div>
+
+                <!-- Status Display -->
+                <div class="status-display" id="statusDisplay">
+                    <h3 class="status-title"><i class="fas fa-chart-line"></i> Statistik Download</h3>
+                    <div class="status-grid">
+                        <div class="status-item">
+                            <div class="status-icon speed-icon">
+                                <i class="fas fa-tachometer-alt"></i>
+                            </div>
+                            <div class="status-content">
+                                <span class="status-label">Kecepatan</span>
+                                <span id="speedText" class="status-value">Menunggu...</span>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-icon eta-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="status-content">
+                                <span class="status-label">Estimasi Waktu</span>
+                                <span id="etaText" class="status-value">--:--</span>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-icon size-icon">
+                                <i class="fas fa-weight-hanging"></i>
+                            </div>
+                            <div class="status-content">
+                                <span class="status-label">Ukuran File</span>
+                                <span id="sizeText" class="status-value">0 MB</span>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-icon downloaded-icon">
+                                <i class="fas fa-download"></i>
+                            </div>
+                            <div class="status-content">
+                                <span class="status-label">Terunduh</span>
+                                <span id="downloadedText" class="status-value">0 MB</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Download History/Status -->
+            <div class="card history-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-history"></i> Status Download</h3>
+                    <div class="status-indicator idle" id="statusIndicator">
+                        <div class="status-dot"></div>
+                        <span class="status-label">Siap</span>
+                    </div>
+                </div>
+                
+                <div class="status-message" id="statusMessage">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Masukkan URL YouTube untuk memulai download</span>
+                </div>
+                
+                <div class="file-info" id="fileInfo">
+                    <div class="info-section">
+                        <div class="info-label">
+                            <i class="fas fa-file"></i>
+                            <strong>File:</strong>
+                        </div>
+                        <span id="fileName" class="info-value">-</span>
+                    </div>
+                    <div class="info-section">
+                        <div class="info-label">
+                            <i class="fas fa-folder"></i>
+                            <strong>Lokasi:</strong>
+                        </div>
+                        <span id="fileLocation" class="info-value">~/Downloads/YouTube_Downloads</span>
+                    </div>
+                    <div class="info-section">
+                        <div class="info-label">
+                            <i class="fas fa-tasks"></i>
+                            <strong>Status:</strong>
+                        </div>
+                        <span id="fileStatus" class="info-value status-ready">Menunggu</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-content">
+                <p class="footer-text">
+                    <i class="fas fa-code"></i> 
+                    Dibuat dengan <span class="highlight">yt-dlp</span> & <span class="highlight">Flask</span>
+                </p>
+                <div class="footer-separator"></div>
+                <p class="footer-note">
+                    <i class="fas fa-info-circle"></i>
+                    Hanya 1 download dalam 1 waktu • Gunakan browser dengan login untuk video dengan batasan usia
+                </p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
